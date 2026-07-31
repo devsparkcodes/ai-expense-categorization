@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-expense-categorization"
+version = "0.1.0"
+description = "AI-powered expense categorization system"
+readme = "README.md"
+requires-python = ">=3.10"

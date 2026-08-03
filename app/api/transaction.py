@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends
-from sqlmodel import Session
 from uuid import UUID
+
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from sqlmodel import Session
 
 from app.database.database import get_session
 from app.schemas.transaction import TransactionCreate
@@ -10,9 +12,14 @@ from app.services.transaction import (
     get_transaction as _get_transaction,
     get_transactions as _get_transactions,
     update_transaction as _update_transaction,
+    update_transaction_category as _update_transaction_category,
 )
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
+
+
+class CategoryUpdate(BaseModel):
+    category: str
 
 
 @router.get("/", status_code=200)
@@ -53,3 +60,14 @@ def delete_transaction(
     db: Session = Depends(get_session),
 ):
     return _delete_transaction(db=db, transaction_id=transaction_id)
+
+
+@router.patch("/{transaction_id}/category", status_code=200)
+def update_transaction_category(
+    transaction_id: UUID,
+    category_data: CategoryUpdate,
+    db: Session = Depends(get_session),
+):
+    return _update_transaction_category(
+        db=db, transaction_id=transaction_id, category=category_data.category
+    )

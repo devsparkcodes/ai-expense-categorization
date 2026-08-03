@@ -1,5 +1,12 @@
-.venv/
+# Database
+*.db
+
+# Environment
+.env
+
+# Python
 __pycache__/
 *.pyc
-.env
-.DS_Store
+
+# Virtual Environment
+.venv/

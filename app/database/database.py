@@ -2,6 +2,8 @@ from typing import Generator
 
 from sqlmodel import SQLModel, Session, create_engine
 
+from app.models.category_feedback import CategoryFeedback
+
 SQL_DATABASE_URL = "sqlite:///./expense.db"
 
 engine = create_engine(SQL_DATABASE_URL, echo=False)

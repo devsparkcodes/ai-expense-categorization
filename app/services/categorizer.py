@@ -1,6 +1,11 @@
 import json
 import re
 from pathlib import Path
+from typing import Optional
+
+from sqlmodel import Session, select
+
+from app.models.category_feedback import CategoryFeedback
 
 _KB_PATH = Path(__file__).resolve().parent.parent / "data" / "merchant_categories.json"
 
@@ -17,7 +22,16 @@ def normalize_merchant_name(name: str) -> str:
     return name
 
 
-def predict_category(merchant_name: str) -> str:
+def predict_category(merchant_name: str, db: Optional[Session] = None) -> str:
+    if db is not None:
+        merchant_normalized = normalize_merchant_name(merchant_name)
+        feedback_records = db.exec(
+            select(CategoryFeedback)
+        ).all()
+        for fb in feedback_records:
+            if normalize_merchant_name(fb.merchant_name) == merchant_normalized:
+                return fb.corrected_category
+
     kb = _load_knowledge_base()
     merchant = normalize_merchant_name(merchant_name)
     for category, merchants in kb.items():

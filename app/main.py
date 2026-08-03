@@ -12,4 +12,4 @@ app.include_router(transaction_router)
 def startup():
     """Create all database tables when the application starts."""
     create_db_and_tables()
-    
+

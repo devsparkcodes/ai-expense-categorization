@@ -1,0 +1,39 @@
+{
+  "Food": [
+    "KFC",
+    "McDonald's",
+    "Burger King",
+    "Domino's Pizza",
+    "Pizza Hut"
+  ],
+  "Fuel": [
+    "PSO",
+    "Shell",
+    "Total Parco",
+    "GO Petroleum"
+  ],
+  "Transport": [
+    "Uber",
+    "Careem",
+    "InDrive"
+  ],
+  "Entertainment": [
+    "Spotify",
+    "Spotify Premium",
+    "Netflix",
+    "YouTube Premium"
+  ],
+  "Shopping": [
+    "Daraz",
+    "Amazon",
+    "Apple",
+    "AliExpress"
+  ],
+  "Utilities": [
+    "KE Electric",
+    "K-Electric",
+    "Sui Southern Gas",
+    "PTCL",
+    "Nayatel"
+  ]
+}

@@ -5,12 +5,27 @@ from sqlmodel import Session, select
 
 from app.models.transaction import Transaction
 from app.schemas.transaction import TransactionCreate
+from app.services.categorizer import predict_category
+from app.services.ai_categorizer import predict_category_ai
 
 
 def create_transaction(db: Session, transaction_data: TransactionCreate) -> dict:
+    predicted_category = predict_category(transaction_data.merchant_name)
+    if predicted_category != "Uncategorized":
+        confidence = 1.0
+        prediction_source = "rule_engine"
+        requires_review = False
+    else:
+        predicted_category = predict_category_ai(transaction_data.merchant_name)
+        confidence = 0.5
+        prediction_source = "ai"
+        requires_review = True
     db_transaction = Transaction(
         **transaction_data.model_dump(),
-        predicted_category="Uncategorized",
+        predicted_category=predicted_category,
+        confidence=confidence,
+        prediction_source=prediction_source,
+        requires_review=requires_review,
         is_verified=False,
     )
     db.add(db_transaction)

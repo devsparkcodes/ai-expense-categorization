@@ -24,3 +24,10 @@ class TopMerchantItem(BaseModel):
     merchant: str
     total_spending: float
     transaction_count: int
+
+
+class SpendingTrendItem(BaseModel):
+    """Schema for a single spending trend entry."""
+
+    period: str
+    total_spending: float

@@ -60,3 +60,42 @@ def get_top_merchants(db: Session) -> list:
         }
         for merchant, total_spending, count in rows
     ]
+
+
+def get_daily_spending(db: Session) -> list:
+    period = func.strftime("%Y-%m-%d", Transaction.transaction_date)
+    rows = db.exec(
+        select(period, func.sum(Transaction.amount))
+        .group_by(period)
+        .order_by(period)
+    ).all()
+    return [
+        {"period": period, "total_spending": float(total_spending or 0)}
+        for period, total_spending in rows
+    ]
+
+
+def get_weekly_spending(db: Session) -> list:
+    period = func.strftime("%G-W%V", Transaction.transaction_date)
+    rows = db.exec(
+        select(period, func.sum(Transaction.amount))
+        .group_by(period)
+        .order_by(period)
+    ).all()
+    return [
+        {"period": period, "total_spending": float(total_spending or 0)}
+        for period, total_spending in rows
+    ]
+
+
+def get_monthly_spending(db: Session) -> list:
+    period = func.strftime("%Y-%m", Transaction.transaction_date)
+    rows = db.exec(
+        select(period, func.sum(Transaction.amount))
+        .group_by(period)
+        .order_by(period)
+    ).all()
+    return [
+        {"period": period, "total_spending": float(total_spending or 0)}
+        for period, total_spending in rows
+    ]

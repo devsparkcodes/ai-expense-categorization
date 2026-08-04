@@ -8,3 +8,11 @@ class AnalyticsSummaryResponse(BaseModel):
     total_spending: float
     average_transaction: float
     highest_transaction: float
+
+
+class CategoryBreakdownItem(BaseModel):
+    """Schema for a single category breakdown entry."""
+
+    category: str
+    total_spending: float
+    transaction_count: int

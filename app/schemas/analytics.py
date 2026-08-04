@@ -16,3 +16,11 @@ class CategoryBreakdownItem(BaseModel):
     category: str
     total_spending: float
     transaction_count: int
+
+
+class TopMerchantItem(BaseModel):
+    """Schema for a single top merchant entry."""
+
+    merchant: str
+    total_spending: float
+    transaction_count: int

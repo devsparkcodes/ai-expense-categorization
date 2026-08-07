@@ -1,3 +1,5 @@
+from datetime import date
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -24,8 +26,31 @@ class CategoryUpdate(BaseModel):
 
 
 @router.get("/", status_code=200)
-def get_transactions(db: Session = Depends(get_session)):
-    return _get_transactions(db=db)
+def get_transactions(
+    db: Session = Depends(get_session),
+    category: Optional[str] = None,
+    merchant: Optional[str] = None,
+    search: Optional[str] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    sort_by: str = "transaction_date",
+    order: str = "desc",
+    page: int = 1,
+    limit: int = 10,
+):
+    """List transactions with optional filtering, search, sorting, and pagination."""
+    return _get_transactions(
+        db=db,
+        category=category,
+        merchant=merchant,
+        search=search,
+        start_date=start_date,
+        end_date=end_date,
+        sort_by=sort_by,
+        order=order,
+        page=page,
+        limit=limit,
+    )
 
 
 @router.get("/{transaction_id}", status_code=200)

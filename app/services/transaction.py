@@ -1,7 +1,9 @@
+from datetime import date, datetime, time
+from typing import Optional
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlmodel import Session, select
+from sqlmodel import Session, func, or_, select
 
 from app.models.transaction import Transaction
 from app.schemas.transaction import TransactionCreate
@@ -66,8 +68,66 @@ def create_transactions_batch(
     return results
 
 
-def get_transactions(db: Session) -> list:
-    transactions = db.exec(select(Transaction)).all()
+_SORT_COLUMNS = {
+    "transaction_date": Transaction.transaction_date,
+    "amount": Transaction.amount,
+    "merchant_name": Transaction.merchant_name,
+}
+
+
+def get_transactions(
+    db: Session,
+    category: Optional[str] = None,
+    merchant: Optional[str] = None,
+    search: Optional[str] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    sort_by: str = "transaction_date",
+    order: str = "desc",
+    page: int = 1,
+    limit: int = 10,
+) -> list:
+    """List transactions with optional filtering, search, sorting, and pagination."""
+    if sort_by not in _SORT_COLUMNS:
+        raise HTTPException(status_code=400, detail=f"Invalid sort_by: {sort_by}")
+    if order not in ("asc", "desc"):
+        raise HTTPException(status_code=400, detail=f"Invalid order: {order}")
+    if page < 1:
+        raise HTTPException(status_code=400, detail="page must be >= 1")
+    if limit < 1:
+        raise HTTPException(status_code=400, detail="limit must be > 0")
+
+    query = select(Transaction)
+
+    if category:
+        query = query.where(
+            func.lower(Transaction.predicted_category) == category.lower()
+        )
+    if merchant:
+        pattern = f"%{merchant.lower()}%"
+        query = query.where(func.lower(Transaction.merchant_name).like(pattern))
+    if search:
+        pattern = f"%{search.lower()}%"
+        query = query.where(
+            or_(
+                func.lower(Transaction.merchant_name).like(pattern),
+                func.lower(Transaction.description).like(pattern),
+            )
+        )
+    if start_date:
+        query = query.where(
+            Transaction.transaction_date >= datetime.combine(start_date, time.min)
+        )
+    if end_date:
+        query = query.where(
+            Transaction.transaction_date <= datetime.combine(end_date, time.max)
+        )
+
+    column = _SORT_COLUMNS[sort_by]
+    query = query.order_by(column.asc() if order == "asc" else column.desc())
+
+    offset = (page - 1) * limit
+    transactions = db.exec(query.offset(offset).limit(limit)).all()
     return [t.model_dump() for t in transactions]
 
 

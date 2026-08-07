@@ -5,9 +5,10 @@ from pydantic import BaseModel
 from sqlmodel import Session
 
 from app.database.database import get_session
-from app.schemas.transaction import TransactionCreate
+from app.schemas.transaction import TransactionBatchResult, TransactionCreate
 from app.services.transaction import (
     create_transaction as _create_transaction,
+    create_transactions_batch as _create_transactions_batch,
     delete_transaction as _delete_transaction,
     get_transaction as _get_transaction,
     get_transactions as _get_transactions,
@@ -44,6 +45,14 @@ def update_transaction(
     return _update_transaction(
         db=db, transaction_id=transaction_id, transaction_data=transaction_data
     )
+
+
+@router.post("/batch", status_code=200, response_model=list[TransactionBatchResult])
+def create_transactions_batch(
+    transactions: list[TransactionCreate],
+    db: Session = Depends(get_session),
+):
+    return _create_transactions_batch(db=db, transactions=transactions)
 
 
 @router.post("/", status_code=201)

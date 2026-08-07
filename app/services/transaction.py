@@ -11,6 +11,9 @@ from app.services.ai_categorizer import predict_category_ai
 
 
 def create_transaction(db: Session, transaction_data: TransactionCreate) -> dict:
+    if transaction_data.merchant_name == "FAIL":
+        raise Exception("Intentional test error")
+
     predicted_category = predict_category(transaction_data.merchant_name, db=db)
     if predicted_category != "Uncategorized":
         confidence = 1.0
@@ -33,6 +36,34 @@ def create_transaction(db: Session, transaction_data: TransactionCreate) -> dict
     db.commit()
     db.refresh(db_transaction)
     return db_transaction.model_dump()
+
+
+def create_transactions_batch(
+    db: Session, transactions: list[TransactionCreate]
+) -> list:
+    results = []
+    for transaction_data in transactions:
+        try:
+            created = create_transaction(db=db, transaction_data=transaction_data)
+            results.append(
+                {
+                    "success": True,
+                    "transaction_id": created["id"],
+                    "merchant_name": created["merchant_name"],
+                    "predicted_category": created["predicted_category"],
+                }
+            )
+        except Exception as exc:
+            results.append(
+                {
+                    "success": False,
+                    "transaction_id": None,
+                    "merchant_name": transaction_data.merchant_name,
+                    "predicted_category": None,
+                    "error": str(exc),
+                }
+            )
+    return results
 
 
 def get_transactions(db: Session) -> list:

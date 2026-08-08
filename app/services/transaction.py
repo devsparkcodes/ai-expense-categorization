@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, time
 from typing import Optional
 from uuid import UUID
@@ -10,6 +11,7 @@ from app.schemas.transaction import TransactionCreate
 from app.models.category_feedback import CategoryFeedback
 from app.services.categorizer import predict_category
 from app.services.ai_categorizer import predict_category_ai
+from app.services.rag_service import rag_categorize
 
 
 def create_transaction(db: Session, transaction_data: TransactionCreate) -> dict:
@@ -22,10 +24,28 @@ def create_transaction(db: Session, transaction_data: TransactionCreate) -> dict
         prediction_source = "rule_engine"
         requires_review = False
     else:
-        predicted_category = predict_category_ai(transaction_data.merchant_name)
-        confidence = 0.5
-        prediction_source = "ai"
-        requires_review = True
+        rag_result = None
+        try:
+            rag_result = rag_categorize(transaction_data.merchant_name, db=db)
+        except Exception as exc:
+            logging.exception("RAG service failed for merchant '%s': %s", transaction_data.merchant_name, exc)
+
+        if rag_result and rag_result.get("source") == "rag":
+            predicted_category = rag_result["category"]
+            confidence = rag_result["confidence"]
+            prediction_source = "rag"
+            requires_review = False
+        else:
+            context = None
+            if rag_result and rag_result.get("source") == "rag_context":
+                context = rag_result.get("context")
+            predicted_category = predict_category_ai(
+                transaction_data.merchant_name,
+                context=context,
+            )
+            confidence = 0.5
+            prediction_source = "ai"
+            requires_review = True
     db_transaction = Transaction(
         **transaction_data.model_dump(),
         predicted_category=predicted_category,

@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -30,11 +31,17 @@ def _load_system_prompt() -> str:
         return f.read()
 
 
-def predict_category_ai(merchant_name: str) -> str:
+def predict_category_ai(
+    merchant_name: str,
+    context: Optional[list[dict]] = None,
+) -> str:
     """
     Categorize a merchant using an LLM via OpenRouter.
     Returns one of the allowed categories, or 'Other' on failure.
     Returns 'Uncategorized' if the API key is missing.
+
+    When `context` is provided it carries retrieved RAG examples used as
+    supporting reference only; the final category comes from the model.
     """
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
@@ -49,6 +56,18 @@ def predict_category_ai(merchant_name: str) -> str:
 
     system_prompt = _load_system_prompt()
     user_message = f"{system_prompt}\nMerchant: {merchant_name}"
+
+    if context:
+        reference_lines = [
+            f"- {item.get('merchant', '?')} -> {item.get('category', '?')}"
+            for item in context
+        ]
+        user_message += (
+            "\n\nReference examples retrieved from prior knowledge:\n"
+            + "\n".join(reference_lines)
+            + "\n\nTreat these only as supporting reference, not guaranteed truth. "
+            "Decide the category yourself based on the merchant name."
+        )
 
     try:
         response = client.chat.completions.create(

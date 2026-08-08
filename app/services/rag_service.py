@@ -47,10 +47,19 @@ def rag_categorize(
             top_k=DEFAULT_TOP_K,
         )
     except Exception as exc:  # Chroma, embedding, or retrieval failure
-        logger.exception("RAG retrieval failed for merchant '%s': %s", merchant_name, exc)
+        logger.error(
+            "RAG_retrieval merchant=%r outcome=failure error=%s",
+            merchant_name,
+            exc,
+            exc_info=True,
+        )
         return None
 
     if not results:
+        logger.info(
+            "RAG_retrieval merchant=%r outcome=no_results",
+            merchant_name,
+        )
         return None
 
     best = results[0]
@@ -65,6 +74,25 @@ def rag_categorize(
     ]
 
     if best.confidence >= DEFAULT_THRESHOLD:
+        logger.info(
+            "RAG_retrieval merchant=%r outcome=strong_match "
+            "category=%s confidence=%.4f matched_merchant=%r source=%s "
+            "results=%s",
+            merchant_name,
+            best.category,
+            best.confidence,
+            best.matched_merchant,
+            best.source,
+            [
+                {
+                    "merchant": item.matched_merchant,
+                    "category": item.category,
+                    "confidence": round(item.confidence, 4),
+                    "source": item.source,
+                }
+                for item in results
+            ],
+        )
         return RAGCategorizeResult(
             category=best.category,
             confidence=best.confidence,
@@ -73,6 +101,23 @@ def rag_categorize(
             context=context,
         ).model_dump()
 
+    logger.warning(
+        "RAG_retrieval merchant=%r outcome=weak_match(rag_context) "
+        "best_confidence=%.4f best_matched_merchant=%r results=%s "
+        "decision_deferred_to_ai=True",
+        merchant_name,
+        best.confidence,
+        best.matched_merchant,
+        [
+            {
+                "merchant": item.matched_merchant,
+                "category": item.category,
+                "confidence": round(item.confidence, 4),
+                "source": item.source,
+            }
+            for item in results
+        ],
+    )
     return RAGCategorizeResult(
         category=None,
         confidence=best.confidence,

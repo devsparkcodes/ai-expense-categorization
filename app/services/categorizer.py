@@ -22,16 +22,22 @@ def normalize_merchant_name(name: str) -> str:
     return name
 
 
-def predict_category(merchant_name: str, db: Optional[Session] = None) -> str:
-    if db is not None:
-        merchant_normalized = normalize_merchant_name(merchant_name)
-        feedback_records = db.exec(
-            select(CategoryFeedback)
-        ).all()
-        for fb in feedback_records:
-            if normalize_merchant_name(fb.merchant_name) == merchant_normalized:
-                return fb.corrected_category
+def lookup_feedback_category(
+    merchant_name: str, db: Optional[Session] = None
+) -> str:
+    """Look up a category from CategoryFeedback (exact normalized match)."""
+    if db is None:
+        return "Uncategorized"
+    merchant_normalized = normalize_merchant_name(merchant_name)
+    feedback_records = db.exec(select(CategoryFeedback)).all()
+    for fb in feedback_records:
+        if normalize_merchant_name(fb.merchant_name) == merchant_normalized:
+            return fb.corrected_category
+    return "Uncategorized"
 
+
+def lookup_rule_category(merchant_name: str) -> str:
+    """Look up a category from the merchant knowledge base (substring match)."""
     kb = _load_knowledge_base()
     merchant = normalize_merchant_name(merchant_name)
     for category, merchants in kb.items():
@@ -42,3 +48,11 @@ def predict_category(merchant_name: str, db: Optional[Session] = None) -> str:
             if nm in merchant or merchant in nm:
                 return category
     return "Uncategorized"
+
+
+def predict_category(merchant_name: str, db: Optional[Session] = None) -> str:
+    """Categorize a merchant by feedback lookup, then the knowledge base."""
+    category = lookup_feedback_category(merchant_name, db)
+    if category != "Uncategorized":
+        return category
+    return lookup_rule_category(merchant_name)

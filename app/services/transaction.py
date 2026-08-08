@@ -9,43 +9,55 @@ from sqlmodel import Session, func, or_, select
 from app.models.transaction import Transaction
 from app.schemas.transaction import TransactionCreate
 from app.models.category_feedback import CategoryFeedback
+from app.agents.categorization_agent import run_categorization
 from app.services.categorizer import predict_category
 from app.services.ai_categorizer import predict_category_ai
 from app.services.rag_service import rag_categorize
+
+
+def _categorize_sync(merchant_name: str, db: Session) -> tuple:
+    """Legacy synchronous pipeline: Feedback -> Rule Engine -> RAG -> AI."""
+    predicted_category = predict_category(merchant_name, db=db)
+    if predicted_category != "Uncategorized":
+        return predicted_category, 1.0, "rule_engine", False
+
+    rag_result = None
+    try:
+        rag_result = rag_categorize(merchant_name, db=db)
+    except Exception as exc:
+        logging.exception("RAG service failed for merchant '%s': %s", merchant_name, exc)
+
+    if rag_result and rag_result.get("source") == "rag":
+        return rag_result["category"], rag_result["confidence"], "rag", False
+
+    context = None
+    if rag_result and rag_result.get("source") == "rag_context":
+        context = rag_result.get("context")
+    return predict_category_ai(merchant_name, context=context), 0.5, "ai", True
 
 
 def create_transaction(db: Session, transaction_data: TransactionCreate) -> dict:
     if transaction_data.merchant_name == "FAIL":
         raise Exception("Intentional test error")
 
-    predicted_category = predict_category(transaction_data.merchant_name, db=db)
-    if predicted_category != "Uncategorized":
-        confidence = 1.0
-        prediction_source = "rule_engine"
-        requires_review = False
-    else:
-        rag_result = None
-        try:
-            rag_result = rag_categorize(transaction_data.merchant_name, db=db)
-        except Exception as exc:
-            logging.exception("RAG service failed for merchant '%s': %s", transaction_data.merchant_name, exc)
-
-        if rag_result and rag_result.get("source") == "rag":
-            predicted_category = rag_result["category"]
-            confidence = rag_result["confidence"]
-            prediction_source = "rag"
-            requires_review = False
-        else:
-            context = None
-            if rag_result and rag_result.get("source") == "rag_context":
-                context = rag_result.get("context")
-            predicted_category = predict_category_ai(
-                transaction_data.merchant_name,
-                context=context,
-            )
-            confidence = 0.5
-            prediction_source = "ai"
-            requires_review = True
+    try:
+        outcome = run_categorization(transaction_data.merchant_name, db=db)
+        predicted_category = outcome.category
+        confidence = outcome.confidence
+        prediction_source = outcome.prediction_source
+        requires_review = outcome.requires_review
+    except Exception as exc:
+        logging.exception(
+            "Categorization agent failed for merchant '%s'; falling back to synchronous pipeline: %s",
+            transaction_data.merchant_name,
+            exc,
+        )
+        (
+            predicted_category,
+            confidence,
+            prediction_source,
+            requires_review,
+        ) = _categorize_sync(transaction_data.merchant_name, db=db)
     db_transaction = Transaction(
         **transaction_data.model_dump(),
         predicted_category=predicted_category,

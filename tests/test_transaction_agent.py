@@ -1,31 +1,20 @@
-"""Focused tests for Phase 9 transaction-service agent integration.
+"""Pytest tests for the Phase 9 transaction-service agent integration.
 
 No live LLM/API calls: the agent entry point and supporting services are
 mocked so only create_transaction / batch behavior is exercised.
-Run with:  .venv\\Scripts\\python.exe tests\\test_transaction_agent.py
 
-Exit code 0 on success, 1 if any check fails.
+Run with:  .venv\\Scripts\\python.exe -m pytest tests/test_transaction_agent.py -v
 """
 
-import sys
 from datetime import datetime
 from decimal import Decimal
-from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from sqlmodel import SQLModel, Session, create_engine
+import pytest
 
 from app.schemas.agent import CategorizeOutcome
 from app.schemas.transaction import TransactionCreate
 import app.services.transaction as tx
-
-
-def make_db():
-    engine = create_engine("sqlite:///:memory:", poolclass=__import__("sqlalchemy").pool.StaticPool)
-    SQLModel.metadata.create_all(engine)
-    return Session(engine)
 
 
 def make_data(merchant):
@@ -46,96 +35,107 @@ def outcome(category, confidence, source, review):
     )
 
 
-results = []
+def test_rule_match(db):
+    """Rule/feedback match surfaced through the agent outcome."""
+    with patch.object(
+        tx, "run_categorization", return_value=outcome("Food", 1.0, "rule_engine", False)
+    ):
+        result = tx.create_transaction(db, make_data("ALDI"))
+    assert result["predicted_category"] == "Food"
+    assert result["prediction_source"] == "rule_engine"
+    assert result["requires_review"] is False
+    assert result["confidence"] == 1.0
+    assert result["is_verified"] is False
 
 
-def check(label, cond, detail=""):
-    results.append((label, bool(cond), detail))
-    print(("PASS" if cond else "FAIL"), "-", label, detail)
+def test_strong_rag(db):
+    """Strong RAG match is preserved through the agent outcome."""
+    with patch.object(
+        tx, "run_categorization", return_value=outcome("Fuel", 0.87, "rag", False)
+    ):
+        result = tx.create_transaction(db, make_data("CALTEX"))
+    assert result["predicted_category"] == "Fuel"
+    assert result["prediction_source"] == "rag"
+    assert result["confidence"] == 0.87
+    assert result["requires_review"] is False
 
 
-# 1. rule/feedback match via agent
-with patch.object(tx, "run_categorization", return_value=outcome("Food", 1.0, "rule_engine", False)):
-    db = make_db()
-    r = tx.create_transaction(db, make_data("ALDI"))
-    check("rule match", r["predicted_category"] == "Food" and r["prediction_source"] == "rule_engine"
-          and r["requires_review"] is False and r["confidence"] == 1.0 and r["is_verified"] is False,
-          f"src={r['prediction_source']} conf={r['confidence']}")
+def test_weak_rag_to_ai(db):
+    """Weak RAG + AI resolution carries the AI review flag."""
+    with patch.object(
+        tx, "run_categorization", return_value=outcome("Transport", 0.5, "ai", True)
+    ):
+        result = tx.create_transaction(db, make_data("UBER"))
+    assert result["predicted_category"] == "Transport"
+    assert result["prediction_source"] == "ai"
+    assert result["requires_review"] is True
 
-# 2. strong RAG
-with patch.object(tx, "run_categorization", return_value=outcome("Fuel", 0.87, "rag", False)):
-    db = make_db()
-    r = tx.create_transaction(db, make_data("CALTEX"))
-    check("strong RAG", r["predicted_category"] == "Fuel" and r["prediction_source"] == "rag"
-          and r["confidence"] == 0.87 and r["requires_review"] is False,
-          f"src={r['prediction_source']} conf={r['confidence']}")
 
-# 3. weak RAG -> AI (agent resolved to AI with review flag)
-with patch.object(tx, "run_categorization", return_value=outcome("Transport", 0.5, "ai", True)):
-    db = make_db()
-    r = tx.create_transaction(db, make_data("UBER"))
-    check("weak RAG -> AI", r["predicted_category"] == "Transport" and r["prediction_source"] == "ai"
-          and r["requires_review"] is True,
-          f"src={r['prediction_source']} review={r['requires_review']}")
+def test_rag_failure_to_ai(db):
+    """RAG retrieval failure still surfaces an AI outcome from the agent."""
+    with patch.object(
+        tx, "run_categorization", return_value=outcome("Healthcare", 0.5, "ai", True)
+    ):
+        result = tx.create_transaction(db, make_data("PHARMACY"))
+    assert result["predicted_category"] == "Healthcare"
+    assert result["prediction_source"] == "ai"
 
-# 4. RAG failure -> AI (agent still returns AI outcome after retrieval failed)
-with patch.object(tx, "run_categorization", return_value=outcome("Healthcare", 0.5, "ai", True)):
-    db = make_db()
-    r = tx.create_transaction(db, make_data("PHARMACY"))
-    check("RAG failure -> AI", r["predicted_category"] == "Healthcare" and r["prediction_source"] == "ai",
-          f"src={r['prediction_source']}")
 
-# 5. agent failure -> legacy fallback (feedback/rule path)
-with patch.object(tx, "run_categorization", side_effect=RuntimeError("agent boom")):
-    with patch.object(tx, "predict_category", return_value="Education"):
-        db = make_db()
-        r = tx.create_transaction(db, make_data("KIPS SCHOOL"))
-        check("agent failure -> legacy rule", r["predicted_category"] == "Education"
-              and r["prediction_source"] == "rule_engine" and r["confidence"] == 1.0,
-              f"src={r['prediction_source']}")
+def test_agent_failure_legacy_rule(db):
+    """Agent failure falls back to the synchronous feedback/rule path."""
+    with patch.object(tx, "run_categorization", side_effect=RuntimeError("agent boom")):
+        with patch.object(tx, "predict_category", return_value="Education"):
+            result = tx.create_transaction(db, make_data("KIPS SCHOOL"))
+    assert result["predicted_category"] == "Education"
+    assert result["prediction_source"] == "rule_engine"
+    assert result["confidence"] == 1.0
 
-# 5b. agent failure -> legacy full pipeline (feedback miss, rag none, ai fallback)
-with patch.object(tx, "run_categorization", side_effect=RuntimeError("agent boom")):
-    with patch.object(tx, "predict_category", return_value="Uncategorized"):
-        with patch.object(tx, "rag_categorize", return_value=None):
-            with patch.object(tx, "predict_category_ai", return_value="Other"):
-                db = make_db()
-                r = tx.create_transaction(db, make_data("RANDOM SHOP"))
-                check("fallback full pipeline", r["predicted_category"] == "Other"
-                      and r["prediction_source"] == "ai" and r["requires_review"] is True,
-                      f"src={r['prediction_source']}")
 
-# 6. batch processing (each independently handled; agent mocked)
-with patch.object(tx, "run_categorization", side_effect=[
-    outcome("Food", 1.0, "rule_engine", False),
-    outcome("Shopping", 0.5, "ai", True),
-]):
-    db = make_db()
-    res = tx.create_transactions_batch(db, [make_data("MCDONALDS"), make_data("ASOS")])
-    check("batch success both", len(res) == 2 and all(x["success"] for x in res),
-          f"categories={[x['predicted_category'] for x in res]}")
+def test_agent_failure_legacy_full_pipeline(db):
+    """Agent failure: full legacy pipeline Feedback -> Rule -> RAG -> AI."""
+    with patch.object(tx, "run_categorization", side_effect=RuntimeError("agent boom")):
+        with patch.object(tx, "predict_category", return_value="Uncategorized"):
+            with patch.object(tx, "rag_categorize", return_value=None):
+                with patch.object(tx, "predict_category_ai", return_value="Other"):
+                    result = tx.create_transaction(db, make_data("RANDOM SHOP"))
+    assert result["predicted_category"] == "Other"
+    assert result["prediction_source"] == "ai"
+    assert result["requires_review"] is True
 
-# 6b. batch one failure -> independent handling (batch function unchanged, per-row try/except)
-with patch.object(tx, "run_categorization", side_effect=[
-    outcome("Food", 1.0, "rule_engine", False),
-    RuntimeError("bad merchant"),
-]):
-    with patch.object(tx, "_categorize_sync", side_effect=RuntimeError("sync failure")):
-        db = make_db()
-        res = tx.create_transactions_batch(db, [make_data("MCD"), make_data("X")])
-        check("batch independent", res[0]["success"] is True and res[1]["success"] is False,
-              f"[{res[0]['success']}, {res[1]['success']}]")
 
-# 7. FAIL test case preserved
-db = make_db()
-try:
-    tx.create_transaction(db, make_data("FAIL"))
-    check("FAIL preserves error", False, "no exception raised")
-except Exception as e:
-    check("FAIL preserves error", str(e) == "Intentional test error", f"exc={e}")
+def test_batch_success(db):
+    """Batch processing handles each transaction independently through the agent."""
+    with patch.object(
+        tx,
+        "run_categorization",
+        side_effect=[
+            outcome("Food", 1.0, "rule_engine", False),
+            outcome("Shopping", 0.5, "ai", True),
+        ],
+    ):
+        results = tx.create_transactions_batch(
+            db, [make_data("MCDONALDS"), make_data("ASOS")]
+        )
+    assert len(results) == 2
+    assert all(item["success"] for item in results)
+    assert [item["predicted_category"] for item in results] == ["Food", "Shopping"]
 
-failed = [r for r in results if not r[1]]
-print()
-print("=" * 40)
-print(f"{len(results) - len(failed)}/{len(results)} checks passed")
-sys.exit(1 if failed else 0)
+
+def test_batch_independence(db):
+    """A per-row failure does not stop the remaining rows."""
+    with patch.object(
+        tx,
+        "run_categorization",
+        side_effect=[outcome("Food", 1.0, "rule_engine", False), RuntimeError("bad merchant")],
+    ):
+        with patch.object(tx, "_categorize_sync", side_effect=RuntimeError("sync failure")):
+            results = tx.create_transactions_batch(db, [make_data("MCD"), make_data("X")])
+    assert results[0]["success"] is True
+    assert results[1]["success"] is False
+
+
+def test_fail_guard(db):
+    """The intentional test error ('FAIL' merchant) is preserved."""
+    with pytest.raises(Exception) as exc_info:
+        tx.create_transaction(db, make_data("FAIL"))
+    assert str(exc_info.value) == "Intentional test error"

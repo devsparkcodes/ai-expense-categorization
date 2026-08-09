@@ -1,6 +1,9 @@
 # Database
 *.db
 
+# Chroma vector store (generated data; not committed)
+data/vector_store/
+
 # Environment
 .env
 
@@ -10,3 +13,7 @@ __pycache__/
 
 # Virtual Environment
 .venv/
+
+# Test artifacts
+.pytest_cache/
+*.log

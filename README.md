@@ -12,27 +12,28 @@ Built with FastAPI, SQLModel, ChromaDB, and the OpenAI Agents SDK.
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Main Features](#main-features)
-3. [Architecture / Categorization Flow](#architecture--categorization-flow)
-4. [Technology Stack](#technology-stack)
-5. [Project Structure](#project-structure)
-6. [Prerequisites](#prerequisites)
-7. [Virtual Environment Setup](#virtual-environment-setup)
-8. [Installing Runtime Dependencies](#installing-runtime-dependencies)
-9. [Installing Development/Test Dependencies](#installing-developmenttest-dependencies)
-10. [Environment Variables (.env)](#environment-variables-env)
-11. [RAG Configuration Variables](#rag-configuration-variables)
-12. [Database Setup](#database-setup)
-13. [Building the Vector Index](#building-the-vector-index)
-14. [Running the Application](#running-the-application)
-15. [Health Check Endpoint](#health-check-endpoint)
-16. [API Endpoint Overview](#api-endpoint-overview)
-17. [Testing](#testing)
-18. [OpenAI Agents SDK Integration and Fallback](#openai-agents-sdk-integration-and-fallback)
-19. [RAG Behavior and Similarity Threshold](#rag-behavior-and-similarity-threshold)
-20. [Logging Configuration (LOG_LEVEL)](#logging-configuration-log_level)
-21. [Deployment / Running](#deployment--running)
-22. [Notes on data/vector_store](#important-notes-about-datavector_store)
+2. [Documentation](#documentation)
+3. [Main Features](#main-features)
+4. [Architecture / Categorization Flow](#architecture--categorization-flow)
+5. [Technology Stack](#technology-stack)
+6. [Project Structure](#project-structure)
+7. [Prerequisites](#prerequisites)
+8. [Virtual Environment Setup](#virtual-environment-setup)
+9. [Installing Runtime Dependencies](#installing-runtime-dependencies)
+10. [Installing Development/Test Dependencies](#installing-developmenttest-dependencies)
+11. [Environment Variables (.env)](#environment-variables-env)
+12. [RAG Configuration Variables](#rag-configuration-variables)
+13. [Database Setup](#database-setup)
+14. [Building the Vector Index](#building-the-vector-index)
+15. [Running the Application](#running-the-application)
+16. [Health Check Endpoint](#health-check-endpoint)
+17. [API Endpoint Overview](#api-endpoint-overview)
+18. [Testing](#testing)
+19. [OpenAI Agents SDK Integration and Fallback](#openai-agents-sdk-integration-and-fallback)
+20. [RAG Behavior and Similarity Threshold](#rag-behavior-and-similarity-threshold)
+21. [Logging Configuration (LOG_LEVEL)](#logging-configuration-log_level)
+22. [Deployment / Running](#deployment--running)
+23. [Notes on data/vector_store](#important-notes-about-datavector_store)
 
 ---
 
@@ -51,6 +52,22 @@ The system records a confidence score, a prediction source, and a
 `requires_review` flag for every transaction so ambiguous results can be
 surfaced for manual confirmation. Manual corrections feed back into the
 pipeline via the `CategoryFeedback` table and the vector index.
+
+## Documentation
+
+The repository ships the following official project documents under `docs/`:
+
+- [Business Requirements Document (BRD)](docs/AI_Expense_Categorization_BRD.md) —
+  documents the business problem, objectives, scope, stakeholders, and
+  expected business behavior of the AI Expense Categorization System.
+- [Software Requirements Specification (SRS)](docs/AI_Expense_Categorization_SRS.md) —
+  specifies the software requirements, including functional and
+  non-functional requirements, input/output rules, service behavior, error
+  handling, and technical expectations.
+- [Project Implementation Roadmap (PIR)](docs/AI_Expense_Categorization_PIR_v3_Course.md) —
+  describes the phased implementation roadmap used to build the project,
+  including the course-aligned RAG and OpenAI Agent SDK technical layers,
+  phase timeline, and dependency graph.
 
 ---
 
@@ -176,6 +193,10 @@ agent layer raises or returns unusable output.
 │   ├── test_unit_analytics.py
 │   ├── test_unit_categorizer.py
 │   └── test_unit_rag.py
+├── docs/
+│   ├── AI_Expense_Categorization_BRD.md
+│   ├── AI_Expense_Categorization_SRS.md
+│   └── AI_Expense_Categorization_PIR_v3_Course.md
 ├── requirements.txt
 ├── requirements-dev.txt
 ├── .env.example
